@@ -28,6 +28,7 @@ from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 
 from ..models import GraphMZC
+from ..device import select_device
 from ..data import stratified_split_intervals
 
 
@@ -164,7 +165,7 @@ def retrain_topk(
     import pandas as pd
 
     ks = _normalize_k(k_list if k_list is not None else k)
-    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = device or select_device()
     train_iv, test_iv = stratified_split_intervals(
         width, chroms, labels, neg_ratio=neg_ratio, test_size=0.2, seed=seed
     )
@@ -230,7 +231,7 @@ def retrain_topk_parallel(
     if devices is None:
         n = torch.cuda.device_count() if torch.cuda.is_available() else 0
         devices = [f"cuda:{i}" for i in range(n)] if n > 1 else (
-            ["cuda:0"] if n == 1 else ["cpu"])
+            ["cuda:0"] if n == 1 else [str(select_device())])
 
     ks = _normalize_k(k)
 

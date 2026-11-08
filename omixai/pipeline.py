@@ -30,8 +30,9 @@ from captum.attr import Deconvolution, GuidedBackprop, InputXGradient, Integrate
 from torch_geometric.data import Data
 from torch_geometric.nn import MessagePassing
 from torch_geometric.explain import CaptumExplainer, Explainer, GNNExplainer
+from .device import select_device
 
-_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+_DEVICE = select_device()
 
 CNN_METHODS = ("IG", "IxG", "GB", "Deconv")
 GNN_METHODS = ("IG", "IxG", "GB", "Deconv", "Saliency", "GNNExplainer")
@@ -101,6 +102,7 @@ class OmiXAI:
         pfi_batch_size: int = 64,
         pfi_num_workers: int = 0,
         pfi_devices=None,
+        gnn_explainer_epochs: int = 50,
     ) -> dict[str, np.ndarray]:
         """
         Compute feature scores. Stored vectors are full input width (length F);
@@ -136,6 +138,7 @@ class OmiXAI:
             )
 
         for name in methods:
+            self._gnn_explainer_epochs = gnn_explainer_epochs
             total, count, dim = None, 0, None
             for loader in loaders:
                 t, c = (
@@ -211,7 +214,8 @@ class OmiXAI:
         # with hybrid storage; rank_features slices the leading channels off.
         imp = permutation_importance(
             self.model, data_list, n_skip=0, n_repeats=n_repeats,
-            batch_size=batch_size, num_workers=num_workers, devices=devices,
+            batch_size=batch_size, num_workers=num_workers,
+            devices=devices or [str(self.device)],
         )
         self._scores = {"PFI": imp}
         print(f"PFI: {len(imp)} channels over {len(data_list)} intervals")
@@ -232,8 +236,9 @@ class OmiXAI:
                 continue
             attrs = torch.squeeze(self._captum_attr(explainer, x, method, n_steps_ig), dim=0)
             tp_mean = attrs[tp, :].mean(dim=0)       # full width
-            total = np.zeros_like(tp_mean.cpu().numpy()) if total is None else total
-            total += tp_mean.cpu().detach().numpy()
+            value = tp_mean.detach().cpu().numpy()
+            total = np.zeros_like(value) if total is None else total
+            total += value
             count += 1
         return (total if total is not None else np.zeros(1)), count
 
@@ -255,8 +260,9 @@ class OmiXAI:
                 continue
             mask = explainer_obj(x.squeeze(), edge).node_mask
             tp_mean = mask[tp, :].mean(dim=0)        # full width
-            total = np.zeros_like(tp_mean.cpu().numpy()) if total is None else total
-            total += tp_mean.cpu().detach().numpy()
+            value = tp_mean.detach().cpu().numpy()
+            total = np.zeros_like(value) if total is None else total
+            total += value
             count += 1
         return (total if total is not None else np.zeros(1)), count
 
@@ -279,7 +285,7 @@ class OmiXAI:
             "Saliency": "Saliency",
         }
         algo = (
-            GNNExplainer(epochs=50)
+            GNNExplainer(epochs=getattr(self, "_gnn_explainer_epochs", 50))
             if method == "GNNExplainer"
             else CaptumExplainer(_captum_names[method])
         )
@@ -292,7 +298,7 @@ class OmiXAI:
             model_config=dict(
                 mode="multiclass_classification",
                 task_level="node",
-                return_type="probs",
+                return_type="log_probs",
             ),
         )
 

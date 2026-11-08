@@ -3,14 +3,15 @@ import time
 
 import numpy as np
 import torch
+from ..device import select_device
 import torch.nn as nn
 from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score
 
 # optional: IPython / matplotlib only available in notebooks
 try:
+    from IPython import get_ipython
     from IPython.display import clear_output as _clear_output
-    import matplotlib.pyplot as plt
-    _INTERACTIVE = True
+    _INTERACTIVE = get_ipython() is not None
 except ImportError:
     _INTERACTIVE = False
 
@@ -18,7 +19,7 @@ def _clear():
     if _INTERACTIVE:
         _clear_output()
 
-_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+_DEVICE = select_device()
 
 
 def set_seed(seed: int = 42) -> None:
@@ -112,6 +113,7 @@ def evaluate(model, loader, width: int) -> dict:
 
 
 def _plot(train_hist, val_hist, title, batch_size, n_show=20):
+    import matplotlib.pyplot as plt
     plt.figure(figsize=(n_show, 4))
     plt.title(title)
     n = len(val_hist)

@@ -25,6 +25,7 @@ import numpy as np
 import torch
 from sklearn.metrics import f1_score
 from torch_geometric.loader import DataLoader
+from ..device import select_device
 
 
 @torch.no_grad()
@@ -131,7 +132,7 @@ def permutation_importance(
         if torch.cuda.is_available() and torch.cuda.device_count() > 1:
             devices = [f"cuda:{i}" for i in range(torch.cuda.device_count())]
         else:
-            devices = ["cuda:0" if torch.cuda.is_available() else "cpu"]
+            devices = [str(select_device())]
 
     # single device → run in-process (the common cluster case: 1 GPU)
     if len(devices) == 1:

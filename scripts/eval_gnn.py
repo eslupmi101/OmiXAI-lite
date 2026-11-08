@@ -41,7 +41,8 @@ def eval_global(model, loader, width, device):
 
 
 def main(args):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    from omixai.device import select_device
+    device = select_device(args.device)
     print(f"Device: {device}")
 
     np.random.seed(10)
@@ -81,4 +82,5 @@ if __name__ == "__main__":
     p.add_argument("--data_dir", required=True)
     p.add_argument("--width", type=int, default=100)
     p.add_argument("--feature_names", default="results/feature_names.json")
+    p.add_argument("--device", choices=["auto", "cpu", "mps", "cuda"], default="auto")
     main(p.parse_args())

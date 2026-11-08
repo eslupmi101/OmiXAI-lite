@@ -34,6 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # project root on 
 
 from omixai.data import load_genome_cached, CHROMS
 from omixai.training import retrain_topk, retrain_topk_parallel
+from omixai.device import select_device
 
 
 def _parse_k(text):
@@ -60,7 +61,8 @@ def main(args):
         ranked = rank.sort_values(ascending=False).index.tolist()
         method = "OmiXAI"
 
-    devices = args.devices.split(",") if args.devices else None
+    devices = (args.devices.split(",") if args.devices else
+               [str(select_device(args.device))] if args.device != "auto" else None)
     if args.parallel:
         # workers reload the genome from cache; nothing huge is pickled.
         df = retrain_topk_parallel(
@@ -72,7 +74,8 @@ def main(args):
         DNA, ZDNA, DNA_features, _ = load_genome_cached(args.data_dir)
         df = retrain_topk(ranked, CHROMS, DNA, DNA_features, ZDNA, k=ks,
                           width=args.width, n_epochs=args.n_epochs,
-                          num_workers=args.num_workers, method_name=method)
+                          num_workers=args.num_workers, method_name=method,
+                          device=select_device(args.device))
 
     out = Path(args.out_dir); out.mkdir(parents=True, exist_ok=True)
     single = f"_k{ks[0]}" if len(ks) == 1 and ks[0] is not None else ""
@@ -95,5 +98,6 @@ if __name__ == "__main__":
     p.add_argument("--devices", default=None,
                    help='comma list, e.g. "cuda:0,cuda:1"; default = all visible GPUs')
     p.add_argument("--num_workers", type=int, default=4)
+    p.add_argument("--device", choices=["auto", "cpu", "mps", "cuda"], default="auto")
     p.add_argument("--out_dir", default="results/")
     main(p.parse_args())

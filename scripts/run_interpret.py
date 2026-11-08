@@ -33,11 +33,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # project root on 
 
 from omixai import OmiXAI, GraphMZC, get_train_test_split_graph
 from omixai.data import GraphGenomicDataset, load_genome_cached, CHROMS
+from omixai.device import select_device
 
 
 def main(args):
     out = Path(args.out_dir); out.mkdir(parents=True, exist_ok=True)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = select_device(args.device)
     print(f"Device: {device}")
 
     DNA, ZDNA, DNA_features, feature_names = load_genome_cached(args.data_dir)
@@ -96,5 +97,6 @@ if __name__ == "__main__":
     p.add_argument("--n_repeats", type=int, default=1, help="PFI permutation repeats")
     p.add_argument("--batch_size", type=int, default=64, help="PFI forward batch")
     p.add_argument("--num_workers", type=int, default=4)
+    p.add_argument("--device", choices=["auto", "cpu", "mps", "cuda"], default="auto")
     p.add_argument("--out_dir", default="results/")
     main(p.parse_args())
