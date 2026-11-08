@@ -74,13 +74,108 @@ and the runner scripts work from any directory.
 Only if you want the precise pinned build used for the paper:
 
 ```bash
-pip install -e ".[gpu]" \
+pip install -e .
+pip install -r requirements-gpu.txt \
     --extra-index-url https://download.pytorch.org/whl/cu121 \
     -f https://data.pyg.org/whl/torch-2.1.2+cu121.html
 ```
 
 (torch must be present before the scatter/sparse wheels build, which is why this
 path is pinned and index-specific.)
+
+### Local MacBook M1/M2/M3 with uv (16 GB RAM)
+
+The repository does not vendor the large dataset or trained weights. The
+published [Scientific Reports article](https://www.nature.com/articles/s41598-026-62633-w)
+points to the prepared-data repository
+[`vladislareon/z_dna`](https://github.com/vladislareon/z_dna), the model/code
+repository [`aameliig/OmiXAI`](https://github.com/aameliig/OmiXAI), and
+[`hse-bioinflab/OmicsDC`](https://github.com/hse-bioinflab/OmicsDC) for track
+collection. `z_dna` contains the expected `hg38_dna/`,
+`hg38_zdna/sparse/`, and `hg38_features/sparse/` layout (1,946 omics pickle
+tracks plus four DNA channels, i.e. 1,950 model features). Its sparse pickle
+files require the small [`Sparse_vector`](https://github.com/vladislareon/Sparse_vector)
+module on `PYTHONPATH`.
+
+Download the prepared repository outside Git history, then inspect the label
+pickle before downloading the very large DNA and omics blobs:
+
+```bash
+mkdir -p data_sources
+git clone --filter=blob:none --no-checkout https://github.com/vladislareon/z_dna.git data_sources/z_dna
+git clone --depth 1 https://github.com/vladislareon/Sparse_vector.git data_sources/Sparse_vector
+git -C data_sources/z_dna checkout HEAD -- hg38_zdna/sparse/ZDNA_cousine.pkl
+PYTHONPATH="$PWD/data_sources" uv run python - <<'PY'
+import joblib
+p = joblib.load("data_sources/z_dna/hg38_zdna/sparse/ZDNA_cousine.pkl")
+print(len(p), sorted(p), sum(int((v.data != 0).sum()) for v in p.values()))
+PY
+```
+
+The checked label file currently contains 25 chromosome vectors and 43,486
+nonzero sparse segments; this is a useful integrity check before a full blob
+checkout. For the bounded local workflow below, use real hg38 intervals, an
+hg38 FASTA and coordinate-aligned omics BED or bedGraph tracks. `OmicsDC` is
+the source named in the article for gathering ChIP-Atlas tracks.
+
+```bash
+cd OmiXAI
+uv sync --python 3.12           # creates .venv and uv.lock
+uv run python -c 'import torch; print(torch.__version__, torch.backends.mps.is_available())'
+```
+
+Create a CSV with one **real track** per row. BED files set a binary peak
+indicator; bedGraph files supply a numeric signal divided by `scale`. All
+coordinates must be zero-based half-open hg38; files may end in `.gz`.
+
+```csv
+name,path,kind,scale
+CTCF,/path/to/CTCF.hg38.bed.gz,bed,1
+H3K4me3,/path/to/H3K4me3.hg38.bedgraph.gz,bedgraph,1000
+```
+
+Prepare a small local sample and run the GNN workflow:
+
+```bash
+uv run python scripts/prepare_local_data.py \
+  --fasta /path/to/hg38.fa \
+  --labels-bed /path/to/kouzine.hg38.bed \
+  --tracks-csv /path/to/tracks.csv \
+  --positive 200 --negative 400 --max-features 50 \
+  --output data/local_sample.npz
+uv run python scripts/run_local.py --sample data/local_sample.npz \
+  --device auto --batch-size 4 --epochs 5 --retrain-epochs 3 \
+  --max-interpret 10 --top-k 10,25,50
+```
+
+If the FASTA has no `.fai`, the preparation script indexes it once in the
+output directory. It reads one input track at a time and stores only the
+selected 100 bp windows. `run_local.py` attempts MPS, probes a forward and
+backward pass, and uses CPU if the MPS probe fails. It saves `checkpoint.pt`,
+`scores.npz`, `ranking.csv`, `retrain.csv` and a manifest with the train/test
+indices in `results/local/`. If memory is tight, use `--batch-size 1` and fewer
+windows; use `--device cpu` to compare MPS with CPU. Positive and negative
+windows are nonoverlapping, and the ranking uses training-set true positives
+only. If the trained model finds none, increase `--epochs` or inspect class
+balance before interpreting.
+
+This is a bounded workflow for checking the complete sequence of stages on
+real data. It does not reproduce the article's 1,950-feature experiment or
+published performance numbers. Do not use the unrelated DNABERT model weights
+as an OmiXAI GraphMZC checkpoint.
+
+For a direct smoke run on the published pickle layout, download at least one
+DNA chunk and a few complete feature pickles, then use:
+
+```bash
+PYTHONPATH="$PWD/data_sources" uv run python scripts/prepare_zdna_pickle_sample.py \
+  --data-dir data_sources/z_dna --chrom chr22 --positive 100 --negative 200 \
+  --output data/zdna_chr22_sample.npz
+PYTHONPATH="$PWD/data_sources" uv run python scripts/run_local.py \
+  --sample data/zdna_chr22_sample.npz --out-dir results/zdna_chr22 \
+  --device auto --epochs 3 --retrain-epochs 2 --batch-size 8 \
+  --max-interpret 3 --explainer-epochs 3 --top-k 1,2
+```
 
 ### HSE HPC cluster
 

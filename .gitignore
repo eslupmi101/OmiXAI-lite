@@ -5,6 +5,7 @@ weights/*.bin
 
 # data — too large for git
 z_dna/
+data_sources/
 data/*.npy
 data/*.npz
 data/*.h5
@@ -14,6 +15,7 @@ results/
 *.npy
 *.pt
 *.pth
+*.fai
 
 # Python
 __pycache__/

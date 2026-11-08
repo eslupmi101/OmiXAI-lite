@@ -1,0 +1,6 @@
+# Optional CUDA 12.1 paper reproduction on Linux only. Install with the PyTorch
+# and PyG wheel indexes documented in README.md after the base package.
+torch==2.1.2
+torch-scatter
+torch-sparse
+torch-cluster

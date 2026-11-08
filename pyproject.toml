@@ -38,17 +38,8 @@ dependencies = [
 
 [project.optional-dependencies]
 viz = ["matplotlib>=3.6", "seaborn>=0.12"]
-# Exact GPU reproduction of the paper (CUDA 12.1). The wheels live on dedicated
-# indexes, so install with:
-#   pip install "omixai[gpu]" \
-#     --extra-index-url https://download.pytorch.org/whl/cu121 \
-#     -f https://data.pyg.org/whl/torch-2.1.2+cu121.html
-gpu = [
-    "torch==2.1.2",
-    "torch-scatter",
-    "torch-sparse",
-    "torch-cluster",
-]
+# CUDA-only reproduction dependencies are documented separately. Including
+# source-only PyG extensions here forces uv to build them while locking on Mac.
 
 [project.urls]
 Homepage = "https://github.com/aameliig/OmiXAI"
